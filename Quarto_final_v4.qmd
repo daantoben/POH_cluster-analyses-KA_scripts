@@ -1,0 +1,777 @@
+---
+title: "Cluster analysis for knee arthroplasty"
+author: 
+  - name: "Daan Toben"
+    degrees: Msc
+    orcid: 0000-0003-3180-3327
+    corresponding: true
+    email: d.j.toben@amsterdamumc.nl
+    affiliation:
+    - ref: poh-vu
+    - ref: aph
+  - name: "Astrid de Wind"
+    degrees: PhD
+    orcid: 0000-0003-0022-3805
+    corresponding: false
+    email: a.dewind@amsterdamumc.nl
+    affiliations:
+    - ref: poh-uva
+    - ref: aph
+  - name: "Carlien Straat"
+    degrees: Msc
+    orcid: 
+    corresponding: false
+    email: c.straat@amsterdamumc.nl
+    affiliations:
+    - ref: poh-vu
+    - ref: aph
+  - name: "Eva van der Meij"
+    degrees: 
+      - MD 
+      - PhD
+    orcid: 0000-0002-4905-1867
+    corresponding: false
+    email: ev.vandermeij@amsterdamumc.nl
+    affiliations:
+    - ref: noordwest
+    - ref: aph
+  - name: "Judith Huirne"
+    degrees: 
+      - MD 
+      - Prof.
+    orcid: 0000-0002-8248-2677
+    corresponding: false
+    email: j.huirne@amsterdamumc.nl
+    affiliations:
+    - ref: gyn-uva
+    - ref: aph
+  - name: "Han Anema"
+    degrees: 
+      - MD 
+      - Prof.
+    orcid: 
+    corresponding: false
+    email: h.anema@amsterdamumc.nl
+    affiliations: 
+    - ref: poh-vu
+    - ref: aph
+affiliations:
+  - id: poh-vu
+    name: Amsterdam UMC Vrije Universiteit Amsterdam 
+    department: Public and Occupational Health 
+    address: De Boelelaan 1117
+    city: Amsterdam
+    country: The Netherlands
+  - id: poh-uva
+    name: Amsterdam UMC Universiteit van Amsterdam 
+    department: Public and Occupational Health 
+    address: Meibergdreef 9
+    city: Amsterdam
+    country: The Netherlands
+  - id: aph
+    name: Amsterdam Public Health research institute
+    department: Social Participation & Health
+  - id: noordwest
+    name: NoordWest Ziekenhuisgroep
+    department: Gynaecology, 
+    address: 
+    city: Alkmaar
+    country: The Netherlands
+  - id: gyn-uva
+    name: Amsterdam UMC Universiteit van Amsterdam
+    department: Obstetrics and Gynaecology
+    address: Meibergdreef 9
+    city: Amsterdam
+    country: The Netherlands
+date: "`r Sys.Date()`"
+abstract: Background: Knee arthroplasty (KA) is an effective procedure to mitigate the debilitating impact of osteoarthritis (OA) of the knee. Projections of a growing prevalence of OA, growing utilization of KA surgery, and a shift in the demographics of the target patient group call for a better understanding of how patients respond to KA surgery, and how this impacts their return to the workplace.
+Methods: Using data collected through the ACTIVE trial, we used cluster analysis to map patients’ trajectories of PROMIS-Physical Function t-scores following total- and unicompartmental KA surgery. We interviewed clinical experts to establish substantive interpretation of the resultant clusters in a robust and reproducible manner. Subsequently, we investigated the relationship between these clusters and days until full return to work (RTW) using Cox regression analysis. Lastly, we identified factors associated with cluster membership using multinomial logistic regression. 
+Findings: Based on parsimoniousness, measures of fit, and clinical expertise, we chose the 3-cluster solution as the optimal model. We labelled the clusters as good recovery, moderate recovery, and poor recovery. Using moderate recovery as a reference, patients belonging to the good recovery were more likely to achieve RTW (HR: 2.05, 95% CI: 1.51-2.77, p: <.001) and patients belonging to the poor recovery group were less likely to (HR: 0.46, CI: 0.28-0.75, p: .002). Factors (OR, 95% CI) associated with good recovery included male sex (2.25, 1.16 – 4.40), Unicompartmental surgery (3.26, 1.62 – 6.56), and VAS health score (1.03, 1.01 - 1.05). Factors (OR, 95% CI) associated with poor recovery included higher VAS pain (1.37; 1.02 – 1.86), lower VAS health score (0.98; 0.95 – 1.00), and lower expectations for RTW (2.6; 1.05 – 6.21).
+Conclusion: Recovery following KA surgery is heterogenous, and seemingly actionable factors can be identified that are associated with different functional outcomes. These may help clinicians identify potential poor responders prior to surgery taking place. They might also function as targets for interventions aimed at changing patients’ course of recovery.
+
+format:
+ docx: 
+  toc: false
+editor: visual
+engine: knitr
+---
+
+```{r}
+#| echo: false
+#| include: false
+#| warning: false
+#| label: "Data prep"
+
+# Load libraries
+library(dplyr)              # for data wrangling
+library(tidyr)              # for data wrangling
+library(forcats)            # for data wrangling
+library(readr)              # for reading and writing rds files
+library(here)               # for relative pathways
+library(ggplot2)            # for data visualization
+library(RColorBrewer)       # extra colours for data visualization
+library(crosstable)         # for tables
+library(gtsummary)          # for summary statistics table
+library(reactable)          # for interactive dataframe tables
+library(hrbrthemes)         # for publication-ready ggplot themes
+library(ggridges)           # for Ridgeline plots
+library(viridis)            # for viridis colour palette
+library(lcmm)
+library(stringr)            # for string manipulation
+library(haven)              # to load Carlien's RTW spss file
+library(ggalluvial)         # for alluvial plots
+library(nnet)               # for multinomial logistic regression
+library(knitr)
+library(survival)           # for survival analysis
+library(survminer)          # for kaplan meier curves
+
+# Load data
+RCT_long <- read_rds(file =  here("1.data", "2.processed", "4.analyzed", "RCT_wclusters.rds"))
+load(file=here("1.data", "2.processed", "4.analyzed", "lcga7_new.RData"))
+load(file=here("1.data", "2.processed", "4.analyzed", "BLRT_gmmint.RData"))
+load(file=here("1.data", "2.processed", "4.analyzed", "BLRT_lcga.RData"))
+for_rtw <- read_spss(file =  here("1.data", "1.original", "RTW COX analysebestand.sav"))
+
+# Widen
+RCT <- RCT_long %>% 
+     select(-time_cont) %>%
+     pivot_wider(names_from = time, values_from = tscore)
+
+# Make QoL and VAS scores numeric
+RCT$qol_health <- as.character(RCT$qol_health) %>% as.numeric(RCT$qol_health)
+RCT$vas_pain_avg <- as.character(RCT$vas_pain_avg) %>% as.numeric(RCT$vas_pain_avg)
+
+# Recode categorical variables
+RCT$OK_primair <- as_factor(RCT$OK_primair) %>%
+  recode(`1` = "No",
+         `2` = "Yes")
+
+RCT$expectations_rtw <- as_factor(RCT$expectations_rtw) %>%
+  recode("Yes" = "Quicker than average",
+         "No" = "Slower than average")
+
+
+# Add most up-to-date version of RTW, cleaned by Carlien, to RCT.
+# First, harmonize respondent_id
+for_rtw$respondent_id <- str_replace_all(for_rtw$PatiëntID, "e", "z")
+# Then join them by respondent_id
+RCT <- RCT %>%
+  left_join(for_rtw %>% select(respondent_id, StatusRTWfull, RTWfulldays), by = "respondent_id")
+
+# set cluster colours
+colours <- c("A" = "#1B9E77", 
+             "B" = "#D95F02", 
+             "C" = "#7570B3", 
+             "D" = "#E7298A",
+             "E" = "#66A61E",
+             "F" = "#E6AB02",
+             "G" = "black")
+
+# Set vectors for patient characteristics...
+features <- c("age", "sex", "bmi", "surgery", "education")
+descriptives <- c("surgery", "prior_hip", "sex", "bmi")
+# ...& create functions for descriptive tables
+mediqr_na <- function(x) mediqr(x, na.rm = TRUE, dig = 1)
+mean_na <- function(x) mean(x, na.rm = TRUE)
+sd_na <- function(x) sd(x, na.rm = TRUE)
+
+
+# Likelihood Ratio Tests
+LRT_lcga2 <- -2 * (lcga1$loglik - lcga2$loglik)
+LRT_lcga3 <- -2 * (lcga2$loglik - lcga3$loglik)
+LRT_lcga4 <- -2 * (lcga3$loglik - lcga4$loglik)
+LRT_lcga5 <- -2 * (lcga4$loglik - lcga5$loglik)
+LRT_lcga6 <- -2 * (lcga5$loglik - lcga6$loglik)
+LRT_lcga7 <- -2 * (lcga6$loglik - lcga7$loglik)
+
+
+# REGRESSION ANALYSIS =============================================================
+# Extracting pprob values to weigh the regression analysis (because class membership isn't 100% accurate)
+postprobs <- lcga3$pprob
+RCT <- merge(RCT, postprobs, by = "numeric_id")
+RCT$class <- as_factor(RCT$class) %>%
+  recode(`1` = "A",
+         `2` = "B",
+         `3` = "C")
+
+# Making a weight variable
+RCT$reg_weights <- apply(RCT[, grep("^prob", names(RCT))], 1, max)
+
+# Releveling variables for regression analysis
+RCT$lcga3 <- recode(RCT$lcga3,
+  A = "A",
+  B = "C",
+  C = "B")
+
+RCT$lcga3 <- relevel(RCT$lcga3, ref = "B") %>%
+  recode(A = "Good recovery",
+         B = "Moderate recovery",
+         C = "Poor recovery")
+RCT$sex <- relevel(RCT$sex, ref = "Female") 
+RCT$surgery <- relevel(RCT$surgery, ref = "TKP") 
+
+RCT$StatusRTWfull <- as_factor(RCT$StatusRTWfull) %>% 
+  relevel(RCT$StatusRTWfull, ref = "= 'Niet'") %>%
+  recode(`= 'Wel'`  = 1,
+         `= 'Niet'` = 0)
+
+# MISSING DATA ANALYSIS ===========================================================
+# Generate a dataset with old and final (used) dataset
+RCT_pre <- read_rds(file =  here("1.data", "2.processed", "3.cleaned", "RCT_new.rds"))
+RCT_post <- read_rds(file =  here("1.data", "2.processed", "4.analyzed", "RCT_wclusters.rds"))
+
+# Also add RTW
+RCT_pre <- RCT_pre %>%
+  left_join(for_rtw %>% select(respondent_id, StatusRTWfull, RTWfulldays), by = "respondent_id")
+
+#Factor the new variables so that they can be used for descriptive tables
+RCT_pre$StatusRTWfull <- as_factor(RCT_pre$StatusRTWfull) %>%
+  recode(`1` = "No",
+         `0` = "Yes")
+
+RCT_pre$OK_primair <- as_factor(RCT_pre$OK_primair) %>%
+  recode(`1` = "No",
+         `2` = "Yes")
+
+RCT_pre$expectations_rtw <- as_factor(RCT_pre$expectations_rtw) %>%
+  recode("Yes" = "Quicker than average",
+         "No" = "Not quicker than average")
+
+RCT_pre$vas_pain_avg <- as.numeric(RCT_pre$vas_pain_avg)
+RCT_pre$qol_health <- as.numeric(RCT_pre$qol_health)
+
+# Widen the final dataset
+RCT_post <- RCT_post %>% select(-time_cont) %>% 
+  pivot_wider(names_from = time, values_from = tscore)
+
+# Extract excluded cases by comparing the pre and the post
+resp_na <- setdiff(RCT_pre$respondent_id, RCT_post$respondent_id)
+
+# Identify filtered rows in the original dataset using the resp_na string
+RCT_pre <- RCT_pre %>%
+  mutate(na = if_else(respondent_id %in% resp_na, 1, 0))
+
+```
+
+## Introduction
+
+Knee arthroplasty (KA) is an effective procedure to mitigate the debilitating impact of osteoarthritis (OA) of the knee [@Li2019]. By 2050, the global prevalence of knee OA is projected to grow by 74.9% [@Steinmetz2023]. Working age patients drive this trend [@Culliford2015; @Nemes2015; @Romanini2019] and their expectations differ from the traditional KA demographic, focusing on the resumption of work and sports activities [@Witjes2017]. A better understanding of recovery following KA and how this impacts these patients’ return to work (RTW) is needed to help patients meet their goals.
+
+Trajectory analysis can be a valuable tool in this regard, mapping the heterogeneity of patients’ recovery trajectories into distinct, clinically meaningful patterns [@Nagin2010]. Prior research using these or similar methods has established a basis for refuting the one-size-fits-all model of recovery. Van Egmond et al. [@Egmond2021] found three patterns, adding a middle-of-the-road responders group to the dichotomous picture presented by others [@Dumenci2019; @Harmelink2021; @Lange2020]. Potentially actionable factors like preoperative pain or anxiety were found to be linked to a poor longitudinal outcome profile. Whether these findings generalize to a working age population remains unclear, and the impact of these patterns on the resumption of work has also not yet been investigated.
+
+In this study, we therefore aim to investigate the heterogeneity of functional recovery following KA surgery in working age patients, and to link the resulting patterns to RTW. We look to contribute to the existing knowledge base by including more data points in our operationalization of recovery. Furthermore, we aim to integrate model selection and substantive interpretation of our clusters in a systematic and reproducible manner. Our research question is: Which patterns of recovery can be identified for working age patients recovering from knee arthroplasty? Our secondary questions are 1) How do patients differ between these patterns in terms of their patient characteristics?; and 2) How do these patterns impact patients’ return to work?
+
+## Methods
+
+### Study design and data
+
+We used data collected through the ACTIVE trial, a multicenter, single-blind, randomized, placebo-controlled trial \[@Straat2023\]. The trial was registered in the Netherlands National Trial Register (NL8525). It aimed to investigate the (cost)-effectiveness of the mHealth intervention *ikHerstel* in speeding up patients’ recovery following surgery. Recruitment ran from *Oct 2020* through *Feb* *2023*, with a one-year follow-up period, and aimed to include a sample that was generalizable to the Dutch population of working age KA patients. Patients were recruited using waiting lists of surgical departments across eleven hospitals and clinics in the Netherlands. Data were collected using web-based surveys disseminated at standard time points relative to patients’ date of surgery. Measurement times included a preoperative baseline, 4, 6, and 8 weeks as well as 3, 4, 5, 6, 9, and 12 months following surgery. We used the STROBE statement and the GRoLTS-Checklist to guide our report of the findings [@Schoot2017].
+
+#### Variables
+
+Our main outcome measure was physical functioning, operationalized through the Dutch-Flemish PROMIS-PF item v. 1.2 [@Terwee2014]. Specifically, we used a short form tailored to the needs of patients undergoing knee arthroplasty, which condenses the 121 item bank into 29 activities which patients use to select eight activities that they felt were most important to their recovery. Construct validity and responsiveness for using the short form in this way was investigated previously; the short form t-scores were shown to correlate to the mobility subscale of the WHO Disability Assessment Schedule 2.0 as well as the Short Form-Physical Functioning at T0, T2 and T3; and responsiveness was shown for six out of seven hypotheses [@Meij2018].
+
+Return to work was operationalized as the number of days between surgery and full time resumption of work activities. This was measured using  digital surveys where patients reported if they had resumed work, and if so at what date.
+
+Patient characteristics were used as descriptive variables and as predictors for cluster membership. These were measured at baseline and include: age (years), sex (male/female), educational attainment (low/intermediate/high)(CBS, 2025), body mass index (kg/length^2^), type of surgery (total- or unicompartmental knee arthroplasty), terms of employment (employee/self-employed/both), average work hours per week, recovery expectations prior to surgery (faster than average/slower than average), perceived health prior to surgery (EQ-5D VAS scale 0-100)[@EuroQol1990], experienced fatigue measured through the Multidimensional Fatigue Inventory (MFI) [@Smets1995], Achieving RTW within the study’s data collection period (yes/no), and complications (yes/no).
+
+### Statistical analysis
+
+Statistical analyses were performed using R version 4.3.2. Preliminary analyses involved an assessment of the distribution of the data, data harmonization, and exploration of missing data. Density plots were used for continuous variables and bar charts for categorical variables. Data harmonization was performed in accordance with the secondary character of the data, to safeguard data compatibility and content equivalence [@Adhikari2021]. We used descrptive statistics to compare our dataset to the original, whereby two researchers (DT, AdW) inspected the results and any inconsistencies with the original publication were discussed with its principal author (CS) [INSERT REF CARLIEN].
+
+Missing data analysis was exploratory, consisting of an assessment of the mechanism for missingness through data visualization and Little’s MCAR test. Multiple Imputation, although a valid and reliable approach to missing data in analyses focused on a population parameter, was not performed as its application in cluster analysis is a difficult proposition [@Basagaña2013]. Complete case analysis was used instead.
+
+#### Cluster analysis
+
+A Latent Class Growth Model (LCGM) and a Growth Mixture Model (GMM) were specified in order to cluster each trajectory of physical function following KA into distinct patterns of recovery. Time was modeled as a continuous variable using the measurement times specified by the original trial. Preliminary analysis revealed nonlinear trajectories and these were modeled using a natural spline with 3 degrees of freedom. Our procedure involved four steps [@Jung2008]: First, an unconditional single class growth model was constructed. Second, *k* successive unconditional models were construed, where within-class variance was kept to 0. Third, free estimation of the within-class variance around the intercept was performed. We chose not to explore free estimation of the growth factors to prevent overfitting. At this point, having construed *k* models with targeted free estimation of the random intercepts, the fourth step involved selecting the number of classes.
+
+At each of these steps, we used three model fit indicators to assess model improvement. We used the Bayesian Information Criterion (BIC) which takes the likelihood of the model as well as its number of parameters in consideration. Lower values of BIC indicate better model fit and a decrease of 10 points is frequently cited as sufficient improvement [@Kass1995]. We also used the Bootstrapped Likelihood Ratio Test (BLRT) to test improvement, and we used entropy as a measure of class separation.
+
+Lastly, we interviewed clinicians themselves in order to determine the number of classes, assess the model's clinical relevance, and to substantively interpret each of the clusters' trajectories. In determining We conducted structured interviews with five clinical experts representing the entirety of the patient journey for recovery following KA. During the interviews, our preliminary findings were shared with the clinicians using an interactive dashboard. Screenshots of the dashboards are presented in appendix X. The interview guide was focused on free interpretation of the course of each cluster according to the clinician’s expertise, and it closes with their selecting the *k* model they feel best reflects the clinical practice of recovery following KA. It is included in appendix Y.
+
+Descriptive statistics were used to describe and compare clusters on the basis of patient characteristics. We report the mean and standard deviation for normally distributed variables, the median (interquartile range \[IQR\]) for skewed variables and frequencies (%) for categorical variables. As a test of inter-cluster differences, we used one-way Analysis Of Variance (ANOVA) for normally distributed variables, Kruskal-Wallis ANOVA for skewed variables, and Fisher’s exact test for categorical variables. We applied a statistical significance threshold of α = 0.05.
+
+### Regression analyses
+
+Cox regression analysis was used to investigate the relationship between the patterns and postoperative RTW. Multinomial regression analysis was used to assess the relationship between preoperative characteristics and recovery patterns. We manually implemented the R3step procedure from MPlus to R to correct for the uncertainty inherent in pattern membership.
+
+## Results
+
+### Patient characteristics
+
+Baseline PROMIS-PF data and sufficient follow-up data were available for `r length(unique(RCT_long$numeric_id))` patients. Table 1 shows the patient characteristics for the entire sample, as well as per cluster. Data harmonization showed no irregularities between our data and the original publication \[INSERT REF CARLIEN\]. Missing data analysis indicated data weren't entirely MCAR, in spite of Little’s MCAR test resulting in a p-value of 0.43.
+
+```{r}
+#| echo: false
+#| label: "Table 1: Patient Characteristics"
+#| warning: false
+
+tbl_1 <- RCT %>% 
+  tbl_summary(
+        by = lcga3,
+        include = c(
+          age,
+          sex,
+          bmi,
+          surgery,
+          OK_primair,
+          education,  
+          mvi_total,
+          vas_pain_avg,
+          qol_health,
+          expectations_rtw,
+          employment,
+          work_hrs_mnth,
+          RTWfulldays,
+          StatusRTWfull
+          ),
+        label = list(
+          age ~ "Age",
+          sex ~ "Sex",
+          bmi ~ "BMI",
+          surgery ~ "Surgery type",
+          OK_primair ~ "Prior knee arthroplasty surgery",
+          education ~ "Educational attainment",
+          mvi_total ~ "MVI total score",
+          vas_pain_avg ~ "Average pain past week",
+          qol_health ~ "EQ-5D VAS health score",
+          expectations_rtw ~ "Recovery expectations",
+          employment ~ "terms of employment",
+          work_hrs_mnth ~ "work hours/week",
+          RTWfulldays ~ "Return to work; days",
+          StatusRTWfull ~ "Censored from RTW"
+        ),
+        missing = "no",
+        statistic = list(
+          age ~ "{mean} ({sd})",
+          sex ~ "{n} ({p}%)",
+          bmi ~ "{median} ({p25}-{p75})",
+          surgery ~ "{n} ({p}%)",
+          OK_primair ~ "{n} ({p}%)",
+          education ~ "{n} ({p}%)",
+          mvi_total ~ "{median} ({p25}-{p75})",
+          vas_pain_avg ~ "{mean} ({sd})",
+          qol_health ~ "{mean} ({sd})",
+          expectations_rtw ~ "{n} ({p}%)",
+          employment ~ "{n} ({p}%)",
+          work_hrs_mnth ~ "{median} ({p25}-{p75})",
+          RTWfulldays ~ "{median} ({p25}-{p75})",
+          StatusRTWfull ~ "{n} ({p}%)"
+        )
+      ) %>%
+      add_p(pvalue_fun = label_style_pvalue(digits = 2)) %>%
+  add_overall() %>%
+  bold_labels()
+  
+  tbl_1  
+```
+
+### Cluster analysis
+
+The one-class cluster analysis solution showed a large degree of heterogeneity in the progression of physical function following surgery. BIC values, presented in Table 2, continued to improve over successive iterations of models without a clear injunction point.
+
+```{r}
+#| echo: false
+#| label: "Table 2: iterative fit indices"
+#| warning: false
+#| fig-align: center
+#| fig-responsive: true
+#| fig-format: svg
+
+# Extract AIC & BIC from lcga data objects
+Models <- c(1:7)
+LL <- c(lcga1$loglik, lcga2$loglik, lcga3$loglik, lcga4$loglik, lcga5$loglik, lcga6$loglik, lcga7$loglik)
+BIC <- c(
+  lcga1$BIC, lcga2$BIC, lcga3$BIC, lcga4$BIC, lcga5$BIC, lcga6$BIC, lcga7$BIC)
+AIC <- c(
+  lcga1$AIC, lcga2$AIC, lcga3$AIC, lcga4$AIC, lcga5$AIC, lcga6$AIC, lcga7$AIC)
+BLRT <- c(0, mean(BLRT_1v2_lcga > LRT_lcga2),
+          mean(BLRT_2v3_lcga > LRT_lcga3),
+          mean(BLRT_3v4_lcga > LRT_lcga4),
+          mean(BLRT_4v5_lcga > LRT_lcga5),
+          mean(BLRT_5v6_lcga > LRT_lcga6),
+          mean(BLRT_6v7_lcga > LRT_lcga7))
+Entropy <- c(0, 0.920, 0.939, 0.919, 0.867, 0.883, 0.880)
+Npm <- c(5, 10, 15, 20, 25, 30, 35)
+
+
+fit_df <- data.frame(Models, LL, BIC, AIC, BLRT, Entropy, Npm)
+
+tbl_2 <- kable(fit_df, format = "html")
+
+tbl_2
+```
+
+Based on testing, the BLRT computed for the 3-class versus the 2-class model resulted in p-value below the significance threshold (p \< .001). The BLRT continued to indicate significant improvement through 5 classes but stopped at the extraction of a sixth (p = 0.308). The 3-class solution was chosen as the final model (Figure 3). The entropy value for this model was 0.93 and the average posterior probability of all classes was above 0.97, indicating excellent class separation [@Weller2020].
+
+```{r}
+#| echo: false
+#| label: "Figure 3: 3-class solution"
+#| warning: false
+#| fig-align: center
+#| fig-height: 9
+#| fig-width: 12
+#| fig-responsive: true
+#| fig-format: svg
+
+# Create the plot
+RCT_long %>%
+  ggplot(aes(x=time_cont, y=tscore, group=respondent_id)) +
+  stat_summary(                       # median lines
+    aes(group=lcga3, colour = lcga3), 
+    geom = "line", 
+    fun = "median", 
+    linewidth=2.5) +
+  geom_errorbar(                      
+    aes(group = lcga3, colour = lcga3), 
+    stat = "summary",
+    fun.min = function(z) {quantile(z,0.25)},
+    fun.max = function(z) {quantile(z,0.75)},
+    fun = "median",
+    width = 0.2     
+  ) +
+  scale_colour_manual(values = colours, breaks = c(
+    "A", "C", "B"),
+    labels = c(
+    "Stable high function", "Stable moderate function", "Persistent dysfunction")) +
+  scale_fill_manual(values = colours) +
+  labs(
+    x = "Time (months) after surgery", 
+    y = "Physical functioning tscores",
+    colour = "Clusters"
+    ) +
+  theme_bw() +
+  theme(legend.position="top",
+        plot.title = element_text(size=12)
+        )
+
+
+```
+
+The three recovery patterns described by this model are of a similar shape, and have been labelled accordingly. The largest, cluster B, consisted of `r round(sum(RCT$lcga3 == "B")/nrow(RCT), digits = 2)*100`% of our sample (n = `r sum(RCT$lcga3 == "B")`) and was labelled *Moderate recovery* due to the middle-of-the-road character of the recovery curve. A slight over-representation of female patients was observed in this cluster (`r RCT %>% filter(lcga3 == "B") %>% summarise(round(mean(sex == "Female") * 100, 2)) %>% pull()`%), as well as the highest average BMI score (`r RCT %>% filter(lcga3 == "B") %>% summarise(round(mean(bmi), 2)) %>% pull()`) and a UKP vs TKP distribution (`r RCT %>% filter(lcga3 == "B") %>% summarise(round(mean(surgery == "UKP") * 100, 2)) %>% pull()`% vs `r RCT %>% filter(lcga3 == "B") %>% summarise(round(mean(surgery == "TKP") * 100, 2)) %>% pull()`%) similar to the overall sample. The proportion of patients with high expectations (`r RCT %>% filter(lcga3 == "B") %>% summarise(``ound(mean(expectations_rtw == "Quicker than average") * 100, 2``), 2)) %>% pull()`) was likewise similar, and perceived health was over an average level (`r RCT %>% filter(lcga3 == "C") %>% summarise(round(mean(qol_health), 2)) %>% pull()`/100). Few of these patients were self-employed (`r RCT %>% filter(lcga3 == "B") %>% summarise(round(mean(employment == "self-employed") * 100, 2))`%.
+
+The next in order of size, cluster A (n = `r sum(RCT$lcga3 == "A")`), was labelled *Good recovery* due to the sharp and uninterrupted growth trend of the recovery curve. Male patients are overrepresented (`r RCT %>% filter(lcga3 == "A") %>% summarise(round(mean(sex == "Male") * 100, 2)) %>% pull()`%), average BMI is relatively low (`r RCT %>% filter(lcga3 == "A") %>% summarise(round(mean(bmi), 2)) %>% pull()`), and the ratio KP/TKP is close to a half. Prior to surgery, patients\` experienced fatigue score was low (`r RCT %>% filter(lcga3 == "A") %>% summarise(round(mean(mvi_total), 2)) %>% pull()`), and their perceived health relatively high (`r RCT %>% filter(lcga3 == "A") %>% summarise(round(mean(qol_health), 2)) %>% pull()`/100). The largest proportion of self-employed patients were observed in this cluster (`r RCT %>% filter(lcga3 == "A") %>% summarise(round(mean(``employment == "self-employed") * 100, 2``)) %>% pull()` %).
+
+The smallest group, cluster C (n = `r sum(RCT$lcga3 == "C")`), was labelled as *Poor recovery* due to the absence of growth across it. This group was characterized by an over-representation of female patients (`r RCT %>% filter(lcga3 == "C") %>% summarise(round(mean(sex == "Female") * 100, 2)) %>% pull()`%) with a BMI close to the population average (`r RCT %>% filter(lcga3 == "C") %>% summarise(round(mean(bmi), 2)) %>% pull()`) undergoing mostly TKP (`r RCT %>% filter(lcga3 == "C") %>% summarise(round(mean(surgery == "TKP") * 100, 2)) %>% pull()`%). Prior to surgery, their experienced fatigue was high (`r RCT %>% filter(lcga3 == "C") %>% summarise(round(mean(mvi_total), 2)) %>% pull()`) and their perceived health low (`r RCT %>% filter(lcga3 == "C") %>% summarise(round(mean(qol_health), 2)) %>% pull()`/100). Only `r RCT %>% filter(lcga3 == "C") %>% summarise(round(mean(employment == "self-employed") * 100, 2)) %>% pull()`% of this group was self-employed.
+
+```{r}
+#| echo: false
+#| label: "Table 3: Physical function per cluster"
+#| warning: false
+
+tbl_3 <- RCT %>% 
+  tbl_summary(
+        by = lcga3,
+        include = c(
+          baseline,
+          `4 weeks`,
+          `6 weeks`,
+          `8 weeks`,
+          `3 months`,
+          `4 months`,
+          `5 months`,
+          `6 months`,
+          `9 months`,
+          `12 months`
+          ),
+        label = list(
+          baseline ~ "Baseline",
+          `4 weeks` ~ "4 weeks follow-up",
+          `6 weeks` ~ "6 weeks follow-up",
+          `8 weeks` ~ "8 weeks follow-up",
+          `3 months` ~ "3 months follow-up",
+          `4 months` ~ "4 months follow-up",
+          `5 months` ~ "5 months follow-up",
+          `6 months` ~ "6 months follow-up",
+          `9 months` ~ "9 months follow-up",
+          `12 months` ~ "12 months follow-up"
+        ),
+        missing = "no",
+        statistic = list(
+          baseline ~ "{median} ({p25}-{p75})",
+          `4 weeks` ~ "{median} ({p25}-{p75})",
+          `6 weeks` ~ "{median} ({p25}-{p75})",
+          `8 weeks` ~ "{median} ({p25}-{p75})",
+          `3 months` ~ "{median} ({p25}-{p75})",
+          `4 months` ~ "{median} ({p25}-{p75})",
+          `5 months` ~ "{median} ({p25}-{p75})",
+          `6 months` ~ "{median} ({p25}-{p75})",
+          `9 months` ~ "{median} ({p25}-{p75})",
+          `12 months` ~ "{median} ({p25}-{p75})"
+        )
+      ) %>%
+  bold_labels()
+  
+  tbl_3  
+```
+
+### Regression analysis
+
+For each regression analysis, the largest group (*Moderate recovery)* was chosen as the reference group. Table 4 shows the results of the cox regression analysis investigating the relationship between our clusters and Return to Work (RTW). There was a significant difference in RTW between members of the *Good recovery* group compared to *Moderate recovery* (HR = 2.05, 95% CI = 1.51 – 2.77, p = \<0.001), indicating a greater chance of RTW for these patients. Conversely, patients in the *Poor recovery* group were half as likely to return to work (HR = 0.46, 95% CI = 0.28 – 0.75, p = 0.002) as were patients in the *Moderate recovery* group. The Schoenfeld residual test shows that the residuals were independent of time (p = 0.09). Time-based interaction terms (RTW cut-off set at 70) showed no interaction (p = 0.86). Kaplan Meier curves are presented in appendix Z.
+
+```{r}
+#| echo: false
+#| label: "Table 4: Cox regression analysis for clusters and RTW"
+#| warning: false
+
+model6 <- coxph(Surv(RTWfulldays, StatusRTWfull) ~ lcga3, data = RCT, weights = reg_weights)
+
+tbl_regression(model6, intercept = T,
+  label = list(lcga3 ~ "Cluster")) %>%
+  bold_labels() %>%
+  italicize_levels()
+
+model5 <- multinom(lcga3 ~ age + sex + bmi + surgery + vas_pain_avg + 
+               qol_health + expectations_rtw + StatusRTWfull, data = RCT, 
+               weights = reg_weights)
+
+or <- exp(coef(model5))
+ci_l <- summary(model5)$coefficients - 1.96 * summary(model5)$standard.errors
+ci_h <- summary(model5)$coefficients + 1.96 * summary(model5)$standard.errors
+```
+
+For the multinomial logistic regression analysis, all covariates (OR; 95% CI) were entered simultaneously. For the *Good recovery* group, male sex (`r round(or[5], digits=2)`; `r round(ci_l[5], digits=2)`-`r round(ci_h[5], digits=2)`), Unicompartmental surgery (`r round(or[9], digits=2)`; `r round(ci_l[9], digits=2)`-`r round(ci_h[9], digits=2)`), and VAS health score (`r round(or[13], digits=2)`; `r round(ci_l[13], digits=2)`-`r round(ci_h[13], digits=2)`), were significantly associated. For the *poor recovery* group*,* predictors included VAS pain (`r round(or[12], digits=2)`; `r round(ci_l[12], digits=2)`-`r round(ci_h[12], digits=2)`), VAS health score (`r round(or[14], digits=2)`; `r round(ci_l[14], digits=2)`-`r round(ci_h[14], digits=2)`), and low expectations for RTW (`r round(or[16], digits=2)`; `r round(ci_l[16], digits=2)`-`r round(ci_h[16], digits=2)`) (Table 5).
+
+```{r}
+#| echo: false
+#| label: "Table 5: Multinomial logistic regression analysis for clusters"
+#| warning: false
+
+tbl_regression(model5, intercept = T,
+  label = list(
+    age ~ "Age",
+    sex ~ "Sex",
+    bmi ~ "BMI",
+    surgery ~ "Surgery type",
+    vas_pain_avg ~ "Average pain past week",
+    qol_health ~ "EQ-5D VAS health score",
+    expectations_rtw ~ "Recovery expectations",
+    StatusRTWfull ~ "Censored from RTW")
+  ) %>%
+  bold_labels() %>%
+  italicize_levels()
+
+```
+
+### Interviews
+
+We interviewed five clinicians: two physical therapists (PT), a physician assistant (PA), an orthopedic surgeon (OP), and an occupational physician (CP), using the interactive dashboard to showcase each model. They were not unanimous in their decision for the optimal solution, the physical therapists and the orthopedic surgeon preferred the 3 cluster model, whilst the physician assistant and the occupational physician preferred 4 clusters. The difference between the two groups depended on a balance between parsimoniousness versus validity. For example, one physical therapist noted: *“For practice… use the three groups. That would be easy to understand for everyone, not too complicated. It would be a nice model to bring to the clinic, I think”*.
+
+Clinicians quickly labelled clusters A, B, and C as the good, the average and the poor responders to surgery, respectively. For PA and PO, the addition of cluster D represented an above average group of patients that separated the good (D) from the excellent (A), which they found to be lacking in the 3-class solution. The CP noted, however, that they hadn’t seen many KA surgeries in the past year.
+
+Interestingly, both PTs nuanced their initial negative interpretation of the *Poor recovery* group, criticizing their own clinical perspective as potentially reductionist: *“So even if the green line  has a nice trajectory, clinically speaking, and a nice endpoint given its start, that doesn’t mean that these people are satisfied. Perhaps they much higher expectations or are driven by higher demands put on them by their work.”*  All clinicians except CP felt an interest in early identification of the poor responder group, for both selection and intervention purposes: *“It would be interesting, if this is the prediction, to manipulate it. Could you go about intervening on those poor recovery? Can we improve their predicted course?”*.\
+
+## Discussion
+
+We set out to identify and classify heterogeneity in patients’ recovery of physical function following TKA surgery. Our findings reject a one-sized fits all approach to postoperative recovery following KA. Three distinct patterns - which we labelled *Moderate recovery, Good recovery,* and *Poor recovery* - were found. Cox regression analysis revealed membership of the *Good recovery* group was associated with an increased likelihood of RTW, and membership of the *Poor recovery* group with a decreased likelihood of RTW, compared to *Moderate recovery*. Multinomial logistic regression analysis showed female sex, unicompartmental surgery, and higher preoperative perceived health were associated with membership to the *Good recovery* group. At the same time, higher preoperative pain, lower perceived health, and low RTW expectations prior to surgery were associated with membership to the *Poor recovery* group.
+
+Our results were consistent with other studies [@Egmond2021; @Dowsey2015; @Dumenci2019] in finding a *Poor recovery* group. The lack of a clinically relevant increase in physical function between surgery and one year follow-up, begs the question if surgery was beneficial for these patients. At the same time, the strong associations with potentially actionable factors likelow perceived health, low expectations, and increased preoperative fatigue and pain indicate a potential for preoperative intervention or at least selection. This corresponds with previous research [@Vissers2012; @Singh2010] indicating that physical and mental well-being prior to surgery affect functional recovery afterwards. Working age patients seem no different from traditional KA patients in this regard, and neither does their early identification seem to be any less of a priority looking at the group’s decreased chance of RTW.
+
+When it comes to non-actionable factors, the link between *poor* or *moderate* group membership and female sex is surprising, as studies show no difference in functional outcomes based on sex for these surgeries between men and women [@Ayers2023; @Clement2020; @Lim2015]. This may be explained by the higher burden of OA carried by women in terms of prevalence, pain, and functional limitation [@Segal2024] predisposing them to poorer outcomes. This does not necessarily indicate a confounding relationship, as biological factors like menopause may underlie women’s greater burden of OA given the age range of our sample [@Segal2024]. The high proportion of total KA surgery in both poor and moderate groups was expected given the relative severity of the surgery. The fact that no difference was found between the two groups supports the hypothesis that the course of recovery is more than just a function of the type of surgery employed.
+
+Other studies found a *Moderate recovery* pattern [@Egmond2021; @Golineli2023; @Dowsey2015], although its inclusion clashes with some two-class solutions [@Lange2020]. Compared to the *Poor recovery* group, this group’s improved recovery in the presence of a similar proportion of TKP and improved actionable factors like preoperative pain, perceived health, and preoperative expectations is suggestive of the utility of preoperative intervention to improve postoperative outcomes. The psychosocial character aligns with other studies [@Vonk2014; @Levett2019]. Future research might shed light on this relationship by investigating whether the higher perceptions of health reported by these patients are accurate reflections of their health or whether they’re reflections of a more positive outlook, compared to *Poor recovery* patients.
+
+### Strengths and limitations
+
+Several strengths underlie these reflections. The high number of measurements across the 12 month study period resulted in a detailed picture of physical function following KA surgery. It connects patients’ experiences in the acute period after surgery with the mid to long term. This higher temporal resolution has only nuanced the character of recovery for our clusters, however; it did not result in a different solution when comparing to van Egmond et al. (2020), who used fewer measurements. The use of clinical expertise in substantive interpretation and selection of the cluster models is another strength. Their critical reflection on our findings affirmed some of our preconceptions, like our hypothesis that psychosocial factors underlie differences in functional outcomes, whilst also uncovering flaws. Lastly, our selection of working age patients fills a gap in a field which has so far mostly been focused on older patients.
+
+Several limitations must be addressed. The first is the secondary character of our data, which has meant that we could not analyze some variables nevertheless relevant to KA, like the degree of comorbidity. The inclusion of a Patient Reported Experience Measure (PREM) like a patient’s satisfaction regarding the outcome of their surgery, could have provided more insight into the different patient groups represented by each cluster. As highlighted by some clinicians, it would be interesting to challenge our clinical perspective on these clusters, to verify whether patients in the G*ood recovery* group are actually more satisfied with their procedure compared to patients exhibiting *Poor recovery*.
+
+Another limitation lies in the low number of patients included in our study, increasing the risk of type 2 errors. Cluster analysis is more susceptible to this error as it divides a group into an indeterminate amount of subgroups of unequal size. This would warrant extra care in disregarding associations where small groups are concerned, like categorical variables. No such associations were found in this study, however.
+
+The limited size of the sample was compounded by the exclusion of patients who had fewer than 4 PROMIS scores, missing baseline scores, missing the first three follow-up scores, or missing 4 consecutive follow-up scores, leading to the loss of 13% of patients. This represents another limitation, as filling out questionnaires may very well be related to one’s course of recovery or other factors related to it. Appendix Z shows that this seems to be the case, as a greater proportion of self-employed patients are present in this group, with a much faster RTW a greater proportion of censored patients. Possibly, these patients represent a very successful group whose lack of experienced difficulties caused them to renege on filling out the questionnaire.
+
+### Implications for practice and research
+
+Our findings may benefit clinicians and patients in their preoperative appointments. Patients may find it useful to have a visualization of the diversity of experiences while doctors may find it helps them communicate that same message, managing patients’ expectations. At the same time, the factors associated to each recovery pattern may help surgeons select patients who would benefit most from surgery, and filter out those who wouldn’t. Future research may build on this utility by solidifying these results in a prediction model. A different operationalization of recovery would be preferrable over cluster labels, however, as the exploratory character of the analysis undercuts the generalizability of any algorithm predicting cluster membership.
+
+## Conclusions
+
+Recovery from knee- and hip arthroplasty is not only heterogenous, distinct recovery patterns are apparent and the patients exhibiting these patterns can be identified by their characteristics prior to surgery. Some of these, like sex, are static and limited to serve as early detectors of potentially suboptimal recovery prior to surgery. In this role, they may nevertheless benefit recovery by enhancing shared decision making if they are leveraged to manage patients’ expectations. Others, however, seem actionable and might be leveraged to alter a patient’s course from poor recovery to a moderate or even good response.
+
+## Appendix X: Screenshots of the dashboard
+
+Screenshot 1: LCGA raw plot for 1-class
+
+[Dashboard image A](dashboard%20img%20A.PNG)
+
+Screenshot 2: LCGA raw plot for 4-class
+
+[Dashboard image B](dashboard%20img%20B.PNG)
+
+Screenshot 3: LCGA median plot for 4-class
+
+[Dashboard image C](dashboard%20img%20C.PNG)
+
+Screenshot 4: LCGA versus GMM_int for 5-class
+
+[Dashboard image D](dashboard%20img%20D.PNG)
+
+## Appendix Y: Clinician Interview Guide
+
+### Introduction
+
+1.  **Greeting and Purpose**:
+
+    -   *“Thank you for taking the time to meet with me. I’d like to hear your thoughts on the patient clusters we’ve identified in our analysis of recovery of physical function following total and unicompartmental knee arthroplasty."*
+
+    -   *“The purpose of this interview is to provide interpretation to our data and hopefully improve their validity and interpretability”*
+
+2.  **Dashboard Overview**:
+
+    -   Briefly walk them through the interactive dashboard, explaining the key features:
+
+        -   Longitudinal outcomes (PROMIS-PF scores)
+
+        -   Clustering method
+
+### Main body
+
+**Section 1: General Impressions (5 minutes)**
+
+1.  **Initial Thoughts**
+
+    -   *“What are your initial impressions on the clusters?*
+
+**Section 2: Cluster-Specific Insights (10 minutes)**
+
+1.  **Cluster Interpretation**:
+
+    -   *“Looking at* \[INSERT SPECIFIC CLUSTER\]*, what characteristics or clinical insights come to mind for this group?”*
+
+    -   *“Does the recovery pattern for* \[INSERT SPECIFIC CLUSTER\] *align with any patient groups you encounter?"*
+
+        1.  *(If not, does it remind you of any single cases?)*
+
+    -   Repeat for other clusters
+
+**Section 3: Clinical relevance (7 minutes)**
+
+1.  **Clinical relevance:**
+    -   *“Based on your experience, do these clusters align with what you see in practice?”*
+
+    -   *“Are there any surprising patterns or groups that stand out to you?”*
+
+    -   *“Are there patterns that you’re missing?*"
+2.  **Implications for Practice**:
+    -   *“Do you see potential for using these clusters in clinical practice?”*
+
+    -   *“How would you use this information in clinical practice?”*
+
+    -   *“Are there specific interventions that you think might be more effective for one cluster compared to others?”*
+
+**Section 4: Final Thoughts (3 minutes)**
+
+1.  **Missing Factors**:
+
+    -   *“Is there anything missing that would have made the clusters more clinically useful?"*
+
+2.  **Future Directions**:
+
+    -   *“Would you be interested in using a similar dashboard/data-driven approach in your own practice?”*
+
+3.  **Final thoughts:**
+
+    -   *“Do you have any final thoughts or comments?”*
+
+**Conclusion (2 minutes)**
+
+-   *“Thank you for your time and valuable input, would you be interested in being kept up-to-date regarding our research’s progress?”*
+
+-   *May we approach you for a follow-up meeting?*
+
+## Appendix Z: Excluded versus included patients
+
+```{r}
+#| echo: false
+#| label: "Appendix Z: Excluded versus included sample"
+#| warning: false
+
+app_z <- RCT_pre %>% 
+  tbl_summary(
+    by = na,
+    include = c(
+          age,
+          sex,
+          bmi,
+          surgery,
+          OK_primair,
+          education,  
+          mvi_total,
+          vas_pain_avg,
+          qol_health,
+          expectations_rtw,
+          employment,
+          work_hrs_mnth,
+          RTWfulldays,
+          StatusRTWfull
+          ),
+        label = list(
+          age ~ "Age",
+          sex ~ "Sex",
+          bmi ~ "BMI",
+          surgery ~ "Surgery type",
+          OK_primair ~ "Prior knee arthroplasty surgery",
+          education ~ "Educational attainment",
+          mvi_total ~ "MVI total score",
+          vas_pain_avg ~ "Average pain past week",
+          qol_health ~ "EQ-5D VAS health score",
+          expectations_rtw ~ "Recovery expectations",
+          employment ~ "terms of employment",
+          work_hrs_mnth ~ "work hours/week",
+          RTWfulldays ~ "Return to work; days",
+          StatusRTWfull ~ "Censored from RTW"
+        ),
+        missing = "no",
+        statistic = list(
+          age ~ "{mean} ({sd})",
+          sex ~ "{n} ({p}%)",
+          bmi ~ "{median} ({p25}-{p75})",
+          surgery ~ "{n} ({p}%)",
+          OK_primair ~ "{n} ({p}%)",
+          education ~ "{n} ({p}%)",
+          mvi_total ~ "{median} ({p25}-{p75})",
+          vas_pain_avg ~ "{mean} ({sd})",
+          qol_health ~ "{mean} ({sd})",
+          expectations_rtw ~ "{n} ({p}%)",
+          employment ~ "{n} ({p}%)",
+          work_hrs_mnth ~ "{median} ({p25}-{p75})",
+          RTWfulldays ~ "{median} ({p25}-{p75})",
+          StatusRTWfull ~ "{n} ({p}%)"
+        )
+      ) %>%
+      add_p(pvalue_fun = label_style_pvalue(digits = 2)) %>%
+  add_overall() %>%
+  bold_labels()
+
+app_z
+```
+
+## Appendix ZZ: Kaplain Meier curves of Return to Work per cluster
+
+```{r}
+#| echo: false
+#| label: "Appendix ZZ: Kaplain Meier curves of Return to Work per cluster"
+#| warning: false
+
+# Extract the fit for Kaplan Meier curves
+sfit <- survfit(Surv(RTWfulldays, StatusRTWfull) ~ lcga3, data = RCT)
+
+# Plot the kaplan meeier plot
+ggsurvplot(sfit, data = RCT_long, 
+           palette = c(
+             "#1B9E77", "#7570B3", "#D95F02"
+             ),
+           conf.int = T,
+           xlim = c(0,365),
+           xlab = "Return to Work",
+           risk.table = T,
+           risk.table.col = "strata",
+           risk.table.height = 0.25,
+           legend.labs = c(
+             "Stable high function", "Stable moderate function", "Persistent dysfunction"),
+           risk.table.y.text = FALSE,
+           ggtheme = theme_bw()
+  )
+
+```
