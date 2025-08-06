@@ -3,6 +3,7 @@ Repository for the cluster analysis project for POH in Amsterdam UMC. The reposi
 
 The scripts are run in the following order:
 
+0 = 0.create-file-directories.R
 1 = 1.0_change-respondent-ids.R
 2 = 2.0_PROMIS-prep.R
 3 = 2.1_PROMIS-output-to-R.R
