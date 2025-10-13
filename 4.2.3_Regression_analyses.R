@@ -13,6 +13,7 @@ library(ggplot2)            # for data visualization
 library(RColorBrewer) 
 library(haven)              # to load Carlien's RTW spss file
 library(DescTools)          # for PseudoR2 values
+library(nnet)               # to fit multinomial logistic regression models
 
 
 
@@ -203,5 +204,6 @@ RCT_long %>%
         plot.title = element_text(size=12),
         panel.grid = element_blank()
   )
+
 
 
