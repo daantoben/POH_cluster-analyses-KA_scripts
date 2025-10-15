@@ -14,6 +14,7 @@ library(RColorBrewer)
 library(haven)              # to load Carlien's RTW spss file
 library(DescTools)          # for PseudoR2 values
 library(nnet)               # to fit multinomial logistic regression models
+library(stringr)            # for string manipulation
 
 
 
@@ -34,6 +35,10 @@ for_rtw$respondent_id <- str_replace_all(for_rtw$PatiëntID, "e", "z")
 RCT <- RCT %>%
   left_join(for_rtw %>% select(respondent_id, StatusRTWfull, RTWfulldays), by = "respondent_id")
 
+# Rename and reorder the levels of lcga3 so that they go from high, to moderate, to low
+RCT$lcga3 <- factor(RCT$lcga3,
+                    levels = c("A", "C", "B"), # C is the medium group, a the high, and B the low.
+                    labels = c("Good recovery", "Moderate recovery", "Poor recovery"))
 
 # Now its modelling time
 # 1) the relationship between the cluster labels and Return to Work
@@ -53,12 +58,12 @@ crosstable(RCT, StatusRTWfull, by = lcga4) %>%
 RCT %>% filter(StatusRTWfull == 0) %>%select(RTWfulldays)
 
 # With three-class solution
-model3 <- lm(RTWfulldays ~ relevel(lcga3, ref = "C"), data = RCT)
+model3 <- lm(RTWfulldays ~ relevel(lcga3, ref = "Moderate recovery"), data = RCT)
 summary(model3)
 plot(model3)
 
 # With  censorship in it
-model4 <- lm(RTWfulldays ~ relevel(lcga3, ref = "C") + StatusRTWfull, data = RCT)
+model4 <- lm(RTWfulldays ~ relevel(lcga3, ref = "Moderate recovery") + StatusRTWfull, data = RCT)
 summary(model4)
 plot(model4)
 
@@ -80,18 +85,18 @@ postprobs <- lcga3$pprob
 
 RCT <- merge(RCT, postprobs, by = "numeric_id")
 RCT$class <- as_factor(RCT$class) %>%
-  recode(`1` = "A",
-         `2` = "B",
-         `3` = "C")
-RCT$class == RCT$lcga3
+  recode(`1` = "Good recovery",
+         `2` = "Poor recovery",
+         `3` = "Moderate recovery")
+RCT$class == RCT$lcga3 # Checks out.
 
 # Oops, now with weights because lcga3 class membership isn't 100% accurate
 postprobs <- lcga3$pprob
 RCT <- merge(RCT, postprobs %>% select(c(-class)), by = "numeric_id")
 RCT$class <- as_factor(RCT$class) %>%
-  recode(`1` = "A",
-         `2` = "B",
-         `3` = "C")
+  recode(`1` = "Good recovery",
+         `2` = "Poor recovery",
+         `3` = "Moderate recovery")
 
 # Making a weight variable
 RCT$reg_weights <- apply(RCT[, grep("^prob", names(RCT))], 1, max)
@@ -134,15 +139,11 @@ summary(model6)
 # Extract the fit for Kaplan Meier curves
 sfit <- survfit(Surv(RTWfulldays, StatusRTWfull) ~ lcga3, data = RCT)
 
-# Reorder the levels of lcga3 so that they go from high, to moderate, to low
-RCT$lcga3 <- factor(RCT$lcga3,
-                    levels = c("Good recovery", "Moderate recovery", "Poor recovery"))
-
 # Plot the kaplan meeier plot
+colours <- c("#1B9E77", "#7570B3", "#D95F02")
+
 ggsurvplot(sfit, data = RCT, 
-           palette = c(
-             "#1B9E77", "#7570B3", "#D95F02"
-             ),
+           palette = colours,
            conf.int = T,
            xlim = c(0,365),
            xlab = "Return to Work",
@@ -204,6 +205,4 @@ RCT_long %>%
         plot.title = element_text(size=12),
         panel.grid = element_blank()
   )
-
-
 
