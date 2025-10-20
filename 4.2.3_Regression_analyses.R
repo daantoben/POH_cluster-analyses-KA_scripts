@@ -8,13 +8,14 @@ library(tidyr)              # for data wrangling
 library(forcats)            # for data wrangling
 library(readr)              # for reading and writing rds files
 library(here)               # for relative pathways
-library(crosstable)
+library(crosstable)         # for... crosstables
 library(ggplot2)            # for data visualization
-library(RColorBrewer) 
+library(RColorBrewer)       # for extra colours in ggplot2
 library(haven)              # to load Carlien's RTW spss file
 library(DescTools)          # for PseudoR2 values
 library(nnet)               # to fit multinomial logistic regression models
 library(stringr)            # for string manipulation
+library(gtsummary)          # for summary tables
 
 
 
@@ -205,4 +206,5 @@ RCT_long %>%
         plot.title = element_text(size=12),
         panel.grid = element_blank()
   )
+
 
